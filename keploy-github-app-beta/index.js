@@ -11,12 +11,46 @@ export default (app) => {
   app.on(
     ["pull_request.opened", "pull_request.synchronize"],
     async (context) => {
+      try {
+        // Get repository and PR details
+        const { owner, repo } = context.repo();
+        const { ref } = context.payload.pull_request.head;
+    
+        // Try to get the contents of /keploy directory
+        try {
+          await context.octokit.repos.getContent({
+            owner,
+            repo,
+            path: 'keploy',
+            ref: ref
+          });
+          app.log.info('/keploy folder exists');
+          
+          // Continue with your deployment logic here
+          // ... rest of your deployment code ...
+    
+        } catch (error) {
+          if (error.status === 404) {
+            app.log.warn('/keploy folder not found');
+            // You might want to create a check run or comment on the PR
+            await context.octokit.issues.createComment({
+              ...context.repo(),
+              issue_number: context.payload.pull_request.number,
+              body: '⚠️ Warning: The `/keploy` folder is missing in this PR.'
+            });
+            return;
+          }
+          throw error;
+        }
+    
+      } catch (error) {
+        app.log.error('Error checking /keploy folder:', error);
+      }
       // Creates a deployment on a pull request event
       // Then sets the deployment status to success
       // NOTE: this example doesn't actually integrate with a cloud
       // provider to deploy your app, it just demos the basic API usage.
       app.log.info(context.payload);
-
       // Probot API note: context.repo() => { username: 'hiimbex', repo: 'testing-things' }
       const res = await context.octokit.repos.createDeployment(
         context.repo({
