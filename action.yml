@@ -60,6 +60,85 @@ runs:
         DELAY: ${{ inputs.delay }}
         COMMAND : ${{ inputs.command }}
         KEPLOY_PATH: ${{inputs.keploy-path}}
+
+    - name: Fetch PR changes
+      id: pr-files
+      uses: actions/github-script@v6
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          try {
+            const response = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+            return response.data.map(file => file.filename);
+          } catch (error) {
+            core.setFailed(`Failed to fetch PR files: ${error.message}`);
+          }
+
+    - name: Detect languages
+      id: language-detection
+      shell: bash
+      run: |
+        declare -A extensions=(
+          ["go"]="go"
+          ["js"]="javascript"
+          ["ts"]="javascript" 
+          ["py"]="python"
+          ["java"]="java"
+        )
+        
+        LANGUAGES=""
+        for file in ${{ steps.pr-files.outputs.result }}; do
+          ext="${file##*.}"
+          if [[ -n "${extensions[$ext]}" ]]; then
+            LANGUAGES+="${extensions[$ext]} "
+          fi
+        done
+        
+        UNIQUE_LANGS=$(echo "$LANGUAGES" | tr ' ' '\n' | sort -u | tr '\n' ' ')
+        echo "languages=$UNIQUE_LANGS" >> $GITHUB_OUTPUT
+
+    - name: Install analysis tools
+      shell: bash
+      run: |
+        for lang in ${{ steps.language-detection.outputs.languages }}; do
+          case "$lang" in
+            go)
+              curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s
+              go install github.com/securego/gosec/v2/cmd/gosec@latest
+              ;;
+            javascript)
+              npm install -g eslint
+              ;;
+            python)
+              pip install flake8 bandit
+              ;;
+          esac
+        done
+    - name: Run code analysis
+      shell: bash
+      run: |
+        cd ${{ inputs.working-directory }}
+        mkdir -p analysis-reports
+        
+        for lang in ${{ steps.language-detection.outputs.languages }}; do
+          case "$lang" in
+            go)
+              golangci-lint run --out-format=github-actions ./... > analysis-reports/go-lint.txt
+              gosec ./... > analysis-reports/go-security.txt
+              ;;
+            javascript)
+              eslint . --format junit -o analysis-reports/js-lint.xml
+              ;;
+            python)
+              flake8 . --output-file=analysis-reports/py-lint.txt
+              bandit -r . -f txt -o analysis-reports/py-security.txt
+              ;;
+          esac
+        done
     - name: Check if report is generated
       run: |
         if [ -s ${GITHUB_WORKSPACE}/${WORKDIR}/final.out ]; then
@@ -81,9 +160,32 @@ runs:
             console.error('Error: KEPLOY_REPORT not found.');
             process.exit(1);
           }
+          const fs = require('fs');
+          const path = require('path');
+          
+          function readReport(filepath) {
+            try {
+              return fs.readFileSync(filepath, 'utf8');
+            } catch (error) {
+              return null;
+            }
+          }
+          
+          const reportsDir = path.join('${{ inputs.working-directory }}', 'analysis-reports');
+          const reports = fs.readdirSync(reportsDir)
+            .filter(file => file.endsWith('.txt') || file.endsWith('.xml'))
+            .map(file => readReport(path.join(reportsDir, file)))
+            .filter(Boolean);
+          
+          const summary = `## 📊 TestGPT Analysis Report
+          
+          ${process.env.KEPLOY_REPORT || 'No test results available'}
+          
+          ${reports.join('\n\n')}`;
+          
           github.rest.issues.createComment({
             issue_number: context.issue.number,
             owner: context.repo.owner,
             repo: context.repo.repo,
-            body: process.env.KEPLOY_REPORT
+            body: summary
           })
