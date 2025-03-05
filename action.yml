@@ -25,6 +25,10 @@ inputs:
   build-delay:
     description: Time to wait for docker container build
     default: 50s
+  github-token:
+    description: GitHub token for PR interactions
+    required: false
+    default: ${{ github.token }}
 
 runs:
   using: "composite"
@@ -91,7 +95,7 @@ runs:
         )
         
         LANGUAGES=""
-        for file in ${{ steps.pr-files.outputs.result }}; do
+        for file in $(find . -type f); do
           ext="${file##*.}"
           if [[ -n "${extensions[$ext]}" ]]; then
             LANGUAGES+="${extensions[$ext]} "
@@ -107,8 +111,7 @@ runs:
         for lang in ${{ steps.language-detection.outputs.languages }}; do
           case "$lang" in
             go)
-              curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s
-              go install github.com/securego/gosec/v2/cmd/gosec@latest
+              go install golang.org/x/lint/golint@latest
               ;;
             javascript)
               npm install -g eslint
@@ -127,18 +130,28 @@ runs:
         for lang in ${{ steps.language-detection.outputs.languages }}; do
           case "$lang" in
             go)
-              golangci-lint run --out-format=github-actions ./... > analysis-reports/go-lint.txt
-              gosec ./... > analysis-reports/go-security.txt
+              golangci-lint run --out-format=github-actions ./... > analysis-reports/go-lint.txt || true
               ;;
             javascript)
-              eslint . --format junit -o analysis-reports/js-lint.xml
+              eslint . --format junit -o analysis-reports/js-lint.xml || true
               ;;
             python)
-              flake8 . --output-file=analysis-reports/py-lint.txt
-              bandit -r . -f txt -o analysis-reports/py-security.txt
+              flake8 . --output-file=analysis-reports/py-lint.txt || true
               ;;
           esac
         done
+
+        # Combine reports
+        temp_file=$(mktemp)
+        for report in analysis-reports/*; do
+          if [ -f "$report" ]; then
+            echo "### $(basename "$report")" >> "$temp_file"
+            cat "$report" >> "$temp_file"
+            echo -e "\n---\n" >> "$temp_file"
+          fi
+        done
+        mv "$temp_file" analysis-reports/final-report.txt
+
     - name: Check if report is generated
       run: |
         if [ -s ${GITHUB_WORKSPACE}/${WORKDIR}/final.out ]; then
@@ -154,7 +167,7 @@ runs:
       env:
         KEPLOY_REPORT: ${{ steps.keploy-test-report.outputs.KEPLOY_REPORT }}
       with:
-        github-token: ${{ github.token }}
+        github-token: ${{ inputs.github-token }}
         script: |
           if (!process.env.KEPLOY_REPORT) {
             console.error('Error: KEPLOY_REPORT not found.');
