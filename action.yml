@@ -38,33 +38,31 @@ runs:
         echo "${{ github.action_path }}" >> $GITHUB_PATH
         echo "${{ inputs.working-directory }}"
       shell: bash
-    - name: Grant permissions
-      run: chmod +x ${GITHUB_ACTION_PATH}/install.sh
+      
+    - name: Grant permissions to scripts
+      run: |
+        chmod +x ${GITHUB_ACTION_PATH}/install.sh
+        chmod +x ${GITHUB_ACTION_PATH}/detect-languages.sh
+        chmod +x ${GITHUB_ACTION_PATH}/analyze-code.sh
       shell: bash
+      
     - id: keploy-test-report
-      name: Run Script
-      run:  |
-        ${GITHUB_ACTION_PATH}/install.sh > ${GITHUB_WORKSPACE}/${WORKDIR}/report.txt
-        cat ${GITHUB_WORKSPACE}/${WORKDIR}/report.txt
-
-        # Search for the complete testrun summary and extract total tests, total test passed, and total test failed data
-        grep -oE "COMPLETE TESTRUN SUMMARY\.\s+Total tests: [0-9]+" ${GITHUB_WORKSPACE}/${WORKDIR}/report.txt | sed -r "s/\x1B\[[0-9;]*[mGK]//g" > ${GITHUB_WORKSPACE}/${WORKDIR}/final_total_tests.out
-        grep -oE "COMPLETE TESTRUN SUMMARY\.\s+Total test passed: [0-9]+" ${GITHUB_WORKSPACE}/${WORKDIR}/report.txt | sed -r "s/\x1B\[[0-9;]*[mGK]//g" > ${GITHUB_WORKSPACE}/${WORKDIR}/final_total_passed.out
-        grep -oE "COMPLETE TESTRUN SUMMARY\.\s+Total test failed: [0-9]+" ${GITHUB_WORKSPACE}/${WORKDIR}/report.txt | sed -r "s/\x1B\[[0-9;]*[mGK]//g" > ${GITHUB_WORKSPACE}/${WORKDIR}/final_total_failed.out
-
-        # Combine the results into a single file and prepare output
-        cat ${GITHUB_WORKSPACE}/${WORKDIR}/final_total_tests.out ${GITHUB_WORKSPACE}/${WORKDIR}/final_total_passed.out ${GITHUB_WORKSPACE}/${WORKDIR}/final_total_failed.out > ${GITHUB_WORKSPACE}/${WORKDIR}/final.out
-        echo 'KEPLOY_REPORT<<EOF' > $GITHUB_OUTPUT
-        cat ${GITHUB_WORKSPACE}/${WORKDIR}/final.out >> $GITHUB_OUTPUT
-        echo 'EOF' >> $GITHUB_OUTPUT
-        cat $GITHUB_OUTPUT
+      name: Run Keploy Tests
+      run: ${GITHUB_ACTION_PATH}/install.sh > ${GITHUB_WORKSPACE}/${WORKDIR}/report.txt
       shell: bash
       env:
         WORKDIR: ${{ inputs.working-directory }}
         DELAY: ${{ inputs.delay }}
-        COMMAND : ${{ inputs.command }}
+        COMMAND: ${{ inputs.command }}
         KEPLOY_PATH: ${{inputs.keploy-path}}
 
+    - name: Parse Test Results
+      id: parse-results
+      run: ${GITHUB_ACTION_PATH}/parse-results.sh
+      shell: bash
+      env:
+        WORKDIR: ${{ inputs.working-directory }}
+        
     - name: Fetch PR changes
       id: pr-files
       uses: actions/github-script@v6
@@ -84,73 +82,15 @@ runs:
 
     - name: Detect languages
       id: language-detection
+      run: ${GITHUB_ACTION_PATH}/detect-languages.sh
       shell: bash
-      run: |
-        declare -A extensions=(
-          ["go"]="go"
-          ["js"]="javascript"
-          ["ts"]="javascript" 
-          ["py"]="python"
-          ["java"]="java"
-        )
-        
-        LANGUAGES=""
-        for file in $(find . -type f); do
-          ext="${file##*.}"
-          if [[ -n "${extensions[$ext]}" ]]; then
-            LANGUAGES+="${extensions[$ext]} "
-          fi
-        done
-        
-        UNIQUE_LANGS=$(echo "$LANGUAGES" | tr ' ' '\n' | sort -u | tr '\n' ' ')
-        echo "languages=$UNIQUE_LANGS" >> $GITHUB_OUTPUT
-
-    - name: Install analysis tools
-      shell: bash
-      run: |
-        for lang in ${{ steps.language-detection.outputs.languages }}; do
-          case "$lang" in
-            go)
-              go install golang.org/x/lint/golint@latest
-              ;;
-            javascript)
-              npm install -g eslint
-              ;;
-            python)
-              pip install flake8 bandit
-              ;;
-          esac
-        done
+      
     - name: Run code analysis
+      run: ${GITHUB_ACTION_PATH}/analyze-code.sh
       shell: bash
-      run: |
-        cd ${{ inputs.working-directory }}
-        mkdir -p analysis-reports
-        
-        for lang in ${{ steps.language-detection.outputs.languages }}; do
-          case "$lang" in
-            go)
-              golangci-lint run --out-format=github-actions ./... > analysis-reports/go-lint.txt || true
-              ;;
-            javascript)
-              eslint . --format junit -o analysis-reports/js-lint.xml || true
-              ;;
-            python)
-              flake8 . --output-file=analysis-reports/py-lint.txt || true
-              ;;
-          esac
-        done
-
-        # Combine reports
-        temp_file=$(mktemp)
-        for report in analysis-reports/*; do
-          if [ -f "$report" ]; then
-            echo "### $(basename "$report")" >> "$temp_file"
-            cat "$report" >> "$temp_file"
-            echo -e "\n---\n" >> "$temp_file"
-          fi
-        done
-        mv "$temp_file" analysis-reports/final-report.txt
+      env:
+        WORKDIR: ${{ inputs.working-directory }}
+        DETECTED_LANGUAGES: ${{ steps.language-detection.outputs.languages }}
 
     - name: Check if report is generated
       run: |
@@ -161,11 +101,14 @@ runs:
           exit 1
         fi
       shell: bash
+      env:
+        WORKDIR: ${{ inputs.working-directory }}
+        
     - name: Comment on PR
       if: success()
       uses: actions/github-script@v6
       env:
-        KEPLOY_REPORT: ${{ steps.keploy-test-report.outputs.KEPLOY_REPORT }}
+        KEPLOY_REPORT: ${{ steps.parse-results.outputs.KEPLOY_REPORT }}
       with:
         github-token: ${{ inputs.github-token }}
         script: |
@@ -173,6 +116,7 @@ runs:
             console.error('Error: KEPLOY_REPORT not found.');
             process.exit(1);
           }
+          
           const fs = require('fs');
           const path = require('path');
           
