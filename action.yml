@@ -44,6 +44,7 @@ runs:
         chmod +x ${GITHUB_ACTION_PATH}/install.sh
         chmod +x ${GITHUB_ACTION_PATH}/detect-languages.sh
         chmod +x ${GITHUB_ACTION_PATH}/analyze-code.sh
+        chmod +x ${GITHUB_ACTION_PATH}/parse-results.sh
       shell: bash
       
     - id: keploy-test-report
@@ -75,7 +76,9 @@ runs:
               repo: context.repo.repo,
               pull_number: context.issue.number,
             });
-            return response.data.map(file => file.filename);
+            const files = response.data.map(file => file.filename);
+            core.setOutput('files', files.join(','));
+            return files;
           } catch (error) {
             core.setFailed(`Failed to fetch PR files: ${error.message}`);
           }
@@ -91,6 +94,7 @@ runs:
       env:
         WORKDIR: ${{ inputs.working-directory }}
         DETECTED_LANGUAGES: ${{ steps.language-detection.outputs.languages }}
+        PR_FILES: ${{ steps.pr-files.outputs.files }}
 
     - name: Check if report is generated
       run: |

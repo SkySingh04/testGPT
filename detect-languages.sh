@@ -3,7 +3,9 @@
 declare -A extensions=(
   ["go"]="go"
   ["js"]="javascript"
-  ["ts"]="javascript" 
+  ["ts"]="javascript"
+  ["jsx"]="javascript"
+  ["tsx"]="javascript"
   ["py"]="python"
   ["java"]="java"
 )
