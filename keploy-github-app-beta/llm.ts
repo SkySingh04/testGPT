@@ -238,11 +238,11 @@ There's a syntax error in the add function.
 LGTM!
   `
   
-  app.log.info('Analysis Context:', stringanalysisContext);
+  app.log.info('Analysis Context:', { context: stringanalysisContext });
   app.log.info(`Using Hugging Face API: ${API}`);
   app.log.info(`Using LLM model: ${model}`);
-  app.log.info('Rules:', rules);
-  app.log.info('PR Data:', JSON.stringify(prData, null, 2));
+  app.log.info('Rules:', { rules });
+  app.log.info('PR Data:', { prData: JSON.stringify(prData, null, 2) });
 
 
   // Call the API with the analysis context

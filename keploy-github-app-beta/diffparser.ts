@@ -47,6 +47,8 @@ interface GitHubContext {
         };
         pulls: {
             createReviewComment: (params: ReviewCommentParams) => Promise<unknown>;
+            listFiles: (params: { owner: string; repo: string; pull_number: number }) => Promise<{ data: any[] }>;
+            listReviewComments: (params: { owner: string; repo: string; pull_number: number }) => Promise<{ data: any[] }>;
         };
     };
     repo: () => { owner: string; repo: string };

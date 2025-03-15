@@ -67,11 +67,14 @@ async function getLinkedIssueData(context: GithubContext, app: App, owner: strin
           updated_at: issue.data.updated_at,
           labels: issue.data.labels.map((l: { name: string }) => l.name),
           assignees: issue.data.assignees.map((a: { login: string }) => a.login),
-          comments: comments.map((c: { user: { login: string }, body: string, created_at: string }) => ({
-              author: c.user.login,
-              body: c.body,
-              created_at: c.created_at
-          }))
+          comments: comments.map((c) => {
+              const comment = c as { user: { login: string }, body: string, created_at: string };
+              return {
+                  author: comment.user.login,
+                  body: comment.body,
+                  created_at: comment.created_at
+              };
+          })
       };
   } catch (error) {
       app.log.error('Error fetching linked issue data:', error);
@@ -102,17 +105,25 @@ export function extractCodeChangesForLLM(app: App, files: FileChange[]): CodeCha
       //     return codeFileExtensions.includes(ext);
       // })
       .map((file) => {
-          const changes = parsePatch(file.patch);
+          const f = file as { 
+            filename: string, 
+            status: string, 
+            additions: number, 
+            deletions: number, 
+            changes: number, 
+            patch?: string 
+          };
+          const changes = parsePatch(f.patch);
           return {
-              file: file.filename,
-              type: file.status,
+              file: f.filename,
+              type: f.status,
               changes: {
                   removed: changes.removed.join('\n'),
                   added: changes.added.join('\n')
               },
               stats: {
-                  additions: file.additions,
-                  deletions: file.deletions
+                  additions: f.additions,
+                  deletions: f.deletions
               }
           };
       });
@@ -134,21 +145,24 @@ export async function getPrFilesAndDiffs(context: GithubContext, app: App, owner
           context.octokit.pulls.listFiles,
           { owner, repo, pull_number: prNumber }
       );
-      return files.map((file: { 
-        filename: string, 
-        status: string, 
-        additions: number, 
-        deletions: number, 
-        changes: number, 
-        patch?: string 
-      }) => ({
-          filename: file.filename,
-          status: file.status,
-          additions: file.additions,
-          deletions: file.deletions,
-          changes: file.changes,
-          patch: file.patch || 'Diff too large to display'
-      }));
+      return files.map((file) => {
+          const f = file as { 
+            filename: string, 
+            status: string, 
+            additions: number, 
+            deletions: number, 
+            changes: number, 
+            patch?: string 
+          };
+          return {
+              filename: f.filename,
+              status: f.status,
+              additions: f.additions,
+              deletions: f.deletions,
+              changes: f.changes,
+              patch: f.patch || 'Diff too large to display'
+          };
+      });
   } catch (error) {
       app.log.error('Error fetching files:', error);
       return []; 
@@ -263,10 +277,7 @@ async function getRepositoryContext(context: GithubContext, app: App) {
     // Fetch README content
     const readmeResponse = await context.octokit.repos.getReadme({
       owner,
-      repo,
-      mediaType: {
-        format: 'raw',
-      },
+      repo
     });
     
     // Fetch repository structure using git trees
@@ -274,7 +285,7 @@ async function getRepositoryContext(context: GithubContext, app: App) {
       owner,
       repo,
       tree_sha: 'HEAD',
-      recursive: 'true'
+      recursive: true
     });
 
     const folderStructure = repoStructure.data.tree
@@ -282,8 +293,13 @@ async function getRepositoryContext(context: GithubContext, app: App) {
       .map((item: { path: string }) => item.path)
       .join('\n');
 
+    // Convert ReadmeResponse to string for compatibility with Repository type
+    const readmeContent = typeof readmeResponse.data.content === 'string' 
+      ? Buffer.from(readmeResponse.data.content, 'base64').toString('utf-8')
+      : JSON.stringify(readmeResponse.data);
+
     return {
-      readme: readmeResponse.data,
+      readme: readmeContent,
       structure: folderStructure,
       name: repo,
       owner: owner

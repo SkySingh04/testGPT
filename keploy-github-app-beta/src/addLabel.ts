@@ -44,11 +44,15 @@ export async function addLabelToPR(
     try {
         // Remove existing review labels first
         const existingLabels = Object.keys(LABEL_CONFIGS);
-        await context.octokit.issues.removeLabel({
-            ...context.repo(),
-            issue_number: prNumber,
-            name: existingLabels
-        }).catch(() => {/* Ignore errors if labels don't exist */});
+        
+        // Remove labels one by one since the API expects a single string
+        for (const label of existingLabels) {
+            await context.octokit.issues.removeLabel({
+                ...context.repo(),
+                issue_number: prNumber,
+                name: label
+            }).catch(() => {/* Ignore errors if labels don't exist */});
+        }
 
         // Add new label
         await context.octokit.issues.addLabels({
