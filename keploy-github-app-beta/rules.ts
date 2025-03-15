@@ -11,7 +11,7 @@ export async function getRulesForLLM(context: GithubContext): Promise<Rules> {
     });
 
     // Check if the response is valid and contains content
-    if (response.data && 'content' in response.data) {
+    if (response.data && 'content' in response.data && response.data.content) {
       const content = Buffer.from(response.data.content, 'base64').toString();
       return { success: true, rules: content };
     }
@@ -19,7 +19,7 @@ export async function getRulesForLLM(context: GithubContext): Promise<Rules> {
     return {
       success: false,
       rules: '',
-      error: 'Failed to load rules.md - unexpected response format'
+      error: 'Failed to load rules.md - missing or invalid content'
     };
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
