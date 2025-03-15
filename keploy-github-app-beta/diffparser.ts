@@ -1,16 +1,74 @@
 // diffParser.ts
-import parseDiff from 'parse-diff';
+import parseDiff, { File, Chunk, Change } from 'parse-diff';
 
+// Define interfaces for GitHub context and app
+interface Repository {
+    owner: {
+        login: string;
+    };
+    name: string;
+}
 
-async function parseGitDiffFromLLMOutput(llmOutput: any) {
+interface PullRequest {
+    number: number;
+    head: {
+        sha: string;
+    };
+}
+
+interface GitHubPayload {
+    pull_request: PullRequest;
+    repository: Repository;
+}
+
+interface IssueCommentParams {
+    owner: string;
+    repo: string;
+    issue_number: number;
+    body: string;
+}
+
+interface ReviewCommentParams {
+    owner: string;
+    repo: string;
+    pull_number: number;
+    commit_id: string;
+    path: string;
+    body: string;
+    line: number;
+    mediaType?: {
+        previews: string[];
+    };
+}
+
+interface GitHubContext {
+    octokit: {
+        issues: {
+            createComment: (params: IssueCommentParams) => Promise<unknown>;
+        };
+        pulls: {
+            createReviewComment: (params: ReviewCommentParams) => Promise<unknown>;
+        };
+    };
+    repo: () => { owner: string; repo: string };
+    payload: GitHubPayload;
+}
+
+interface ProbotyApp {
+    log: {
+        info: (message: string) => void;
+        error: (message: string) => void;
+    };
+}
+
+async function parseGitDiffFromLLMOutput(llmOutput: string): Promise<string> {
     const diffStart = llmOutput.indexOf('```diff');
     const diffEnd = llmOutput.indexOf('```', diffStart + 1);
     return llmOutput.substring(diffStart, diffEnd);
 }
 
 
-export async function reviewPR(context: any, app: any, llmOutput: any) {
-// export async function reviewPR(context: any, app: any) {
+export async function reviewPR(context: GitHubContext, app: ProbotyApp, llmOutput: string): Promise<void> {
     //trim the llmOutput to only include the diff
     const ifLGTM = llmOutput.includes('LGTM');
     if (ifLGTM) {
@@ -69,17 +127,19 @@ export async function reviewPR(context: any, app: any, llmOutput: any) {
 }
 
 
-export async function createInlineCommentsFromDiff(diff: string, context: any, app: any) {
-    const parsedFiles = parseDiff(diff);
+export async function createInlineCommentsFromDiff(diff: string, context: GitHubContext, app: ProbotyApp): Promise<void> {
+    const parsedFiles: File[] = parseDiff(diff);
     const { pull_request, repository } = context.payload;
 
     for (const file of parsedFiles) {
         if (file.to === '/dev/null') {
-            app.log.info(`Skipping deleted file: ${file.from}`);
+            // Handle potential undefined value
+            const filePath = file.from || '';
+            app.log.info(`Skipping deleted file: ${filePath}`);
             continue;
         }
 
-        const filePath = file.to || file.from;
+        const filePath = file.to || file.from || '';
 
         for (const chunk of file.chunks) {
             for (const change of chunk.changes) {
@@ -103,10 +163,16 @@ export async function createInlineCommentsFromDiff(diff: string, context: any, a
                         },
                     });
                     app.log.info(`Created comment on ${filePath} line ${line}`);
-                } catch (error: any) {
-                    app.log.error(
-                        `Failed to create comment for ${filePath} line ${line}: ${error.message}`
-                    );
+                } catch (error) {
+                    if (error instanceof Error) {
+                        app.log.error(
+                            `Failed to create comment for ${filePath} line ${line}: ${error.message}`
+                        );
+                    } else {
+                        app.log.error(
+                            `Failed to create comment for ${filePath} line ${line}: Unknown error`
+                        );
+                    }
                 }
             }
         }

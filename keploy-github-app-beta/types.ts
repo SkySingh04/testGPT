@@ -140,31 +140,183 @@ export interface PRData {
   repository: Repository;
 }
 
+// GitHub API parameter and response types
+export interface CreateCommentParams {
+  owner: string;
+  repo: string;
+  issue_number: number;
+  body: string;
+}
+
+export interface CommentResponse {
+  id: number;
+  node_id: string;
+  url: string;
+  html_url: string;
+  body: string;
+  user: User;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GetIssueParams {
+  owner: string;
+  repo: string;
+  issue_number: number;
+}
+
+export interface IssueResponse {
+  id: number;
+  node_id: string;
+  number: number;
+  title: string;
+  user: User;
+  labels: Label[];
+  state: string;
+  locked: boolean;
+  assignees: User[];
+  body: string;
+  created_at: string;
+  updated_at: string;
+  closed_at: string | null;
+  url: string;
+  html_url: string;
+  comments: number;
+}
+
+export interface ListCommentsParams {
+  owner: string;
+  repo: string;
+  issue_number: number;
+  per_page?: number;
+  page?: number;
+}
+
+export interface RemoveLabelParams {
+  owner: string;
+  repo: string;
+  issue_number: number;
+  name: string;
+}
+
+export interface AddLabelsParams {
+  owner: string;
+  repo: string;
+  issue_number: number;
+  labels: string[];
+}
+
+export interface GetReadmeParams {
+  owner: string;
+  repo: string;
+  ref?: string;
+}
+
+export interface ReadmeResponse {
+  type: string;
+  encoding: string;
+  size: number;
+  name: string;
+  path: string;
+  content: string;
+  sha: string;
+  url: string;
+  git_url: string;
+  html_url: string;
+  download_url: string;
+}
+
+export interface GetContentParams {
+  owner: string;
+  repo: string;
+  path: string;
+  ref?: string;
+}
+
+export interface ContentResponse {
+  type: string;
+  encoding: string;
+  size: number;
+  name: string;
+  path: string;
+  content: string;
+  sha: string;
+  url: string;
+  git_url: string;
+  html_url: string;
+  download_url: string;
+}
+
+export interface CreateWorkflowDispatchParams {
+  owner: string;
+  repo: string;
+  workflow_id: string;
+  ref: string;
+  inputs?: Record<string, unknown>;
+}
+
+export interface GetTreeParams {
+  owner: string;
+  repo: string;
+  tree_sha: string;
+  recursive?: boolean;
+}
+
+export interface TreeResponse {
+  sha: string;
+  url: string;
+  tree: Array<{
+    path: string;
+    mode: string;
+    type: string;
+    sha: string;
+    size?: number;
+    url: string;
+  }>;
+  truncated: boolean;
+}
+
+export interface ListFilesParams {
+  owner: string;
+  repo: string;
+  pull_number: number;
+  per_page?: number;
+  page?: number;
+}
+
+export interface ListReviewCommentsParams {
+  owner: string;
+  repo: string;
+  pull_number: number;
+  per_page?: number;
+  page?: number;
+}
+
 // GitHub context types
 export interface GithubContext {
   octokit: {
     issues: {
-      createComment: (params: any) => Promise<any>;
-      get: (params: any) => Promise<any>;
-      listComments: Function;
-      removeLabel: (params: any) => Promise<any>;
-      addLabels: (params: any) => Promise<any>;
+      createComment: (params: CreateCommentParams) => Promise<{ data: CommentResponse }>;
+      get: (params: GetIssueParams) => Promise<{ data: IssueResponse }>;
+      listComments: (params: ListCommentsParams) => Promise<{ data: CommentResponse[] }>;
+      removeLabel: (params: RemoveLabelParams) => Promise<void>;
+      addLabels: (params: AddLabelsParams) => Promise<{ data: Label[] }>;
     };
     pulls: {
-      listFiles: Function;
-      listReviewComments: Function;
+      listFiles: (params: ListFilesParams) => Promise<{ data: FileChange[] }>;
+      listReviewComments: (params: ListReviewCommentsParams) => Promise<{ data: Comment[] }>;
     };
     repos: {
-      getReadme: (params: any) => Promise<any>;
-      getContent: (params: any) => Promise<any>;
+      getReadme: (params: GetReadmeParams) => Promise<{ data: ReadmeResponse }>;
+      getContent: (params: GetContentParams) => Promise<{ data: ContentResponse }>;
     };
     actions: {
-      createWorkflowDispatch: (params: any) => Promise<any>;
+      createWorkflowDispatch: (params: CreateWorkflowDispatchParams) => Promise<void>;
     };
     git: {
-      getTree: (params: any) => Promise<any>;
+      getTree: (params: GetTreeParams) => Promise<{ data: TreeResponse }>;
     };
-    paginate: Function;
+    paginate: <T>(method: Function, params: object) => Promise<T[]>;
   };
   repo: () => { owner: string; repo: string };
   payload: {
@@ -175,8 +327,8 @@ export interface GithubContext {
 // App types
 export interface App {
   log: {
-    info: (message: string, context?: any) => void;
-    error: (message: string, error?: any) => void;
+    info: (message: string, context?: Record<string, unknown>) => void;
+    error: (message: string, error?: Error | unknown) => void;
   };
   on?: (events: string[], callback: (context: GithubContext) => Promise<void>) => void;
 }
