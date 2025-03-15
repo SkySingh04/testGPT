@@ -8,6 +8,7 @@ import {
   FileChange, 
   CodeChanges, 
   LinkedIssue,
+  LinkedIssues,
   PatchResult
 } from './types.js';
 
@@ -40,7 +41,7 @@ export async function getAllPrDetails(context: GithubContext, app: App): Promise
   const { owner, repo } = context.repo();
   
   // Extract issue number from PR body or title using regex
-  const issueNumber = extractIssueNumber(pr.body || pr.title);
+  const issueNumbers = extractIssueNumbers(pr.body || pr.title);
   
   // Prepare all async operations to run in parallel
   const promises = {
@@ -50,9 +51,9 @@ export async function getAllPrDetails(context: GithubContext, app: App): Promise
   };
   
   // Add issue data promise conditionally
-  let issueDataPromise = null;
-  if (issueNumber) {
-    issueDataPromise = getLinkedIssueData(context, app, owner, repo, issueNumber);
+  let issuesDataPromise = null;
+  if (issueNumbers.length > 0) {
+    issuesDataPromise = getLinkedIssueData(context, app, owner, repo, issueNumbers);
   }
   
   // Execute all promises in parallel
@@ -67,13 +68,13 @@ export async function getAllPrDetails(context: GithubContext, app: App): Promise
   ]);
   
   // Process issue data separately since it's conditional
-  let issueData: LinkedIssue | null = null;
-  if (issueDataPromise) {
-    const issueResult = await issueDataPromise;
-    if (issueResult.success) {
-      issueData = issueResult.value;
+  let issuesData: LinkedIssues | null = null;
+  if (issuesDataPromise) {
+    const issuesResult = await issuesDataPromise;
+    if (issuesResult.success) {
+      issuesData = issuesResult.value;
     } else {
-      app.log.error(`Failed to get linked issue data: ${issueResult.error.message}`);
+      app.log.error(`Failed to get linked issue data: ${issuesResult.error.message}`);
       // Optionally post a comment about the issue data fetch failure
     }
   }
@@ -88,52 +89,62 @@ export async function getAllPrDetails(context: GithubContext, app: App): Promise
           labels: pr.labels?.map((l) => l.name) || []
       },
       code_changes: extractCodeChangesForLLM(app, filesResult),
-      linked_issue: issueData,
+      linked_issues: issuesData,
       repository: repoContext
   };
 }
 
-function extractIssueNumber(text: string): number | null {
+function extractIssueNumbers(text: string): number[] {
+  if (!text) return [];
+  
   // Look for patterns like "fixes #123", "closes #123", "related to #123"
-  const match = text?.match(/#(\d+)/);
-  return match ? parseInt(match[1]) : null;
+  const regex = /#(\d+)/g;
+  const matches = [...text.matchAll(regex)];
+  return matches.map(match => parseInt(match[1]));
 }
 
-async function getLinkedIssueData(context: GithubContext, app: App, owner: string, repo: string, issueNumber: number): Promise<Result<LinkedIssue, Error>> {
+async function getLinkedIssueData(context: GithubContext, app: App, owner: string, repo: string, issueNumbers: number[]): Promise<Result<LinkedIssues, Error>> {
   try {
-      // Fetch issue details and comments in parallel
-      const [issue, comments] = await Promise.all([
-          context.octokit.issues.get({
-              owner,
-              repo,
-              issue_number: issueNumber
-          }),
-          context.octokit.paginate(
-              context.octokit.issues.listComments,
-              { owner, repo, issue_number: issueNumber }
-          )
-      ]);
+      const issuePromises = issueNumbers.map(async (issueNumber) => {
+          const [issue, comments] = await Promise.all([
+              context.octokit.issues.get({
+                  owner,
+                  repo,
+                  issue_number: issueNumber
+              }),
+              context.octokit.paginate(
+                  context.octokit.issues.listComments,
+                  { owner, repo, issue_number: issueNumber }
+              )
+          ]);
+          return {
+              number: issueNumber,
+              title: issue.data.title,
+              body: issue.data.body,
+              state: issue.data.state,
+              author: issue.data.user.login,
+              created_at: issue.data.created_at,
+              updated_at: issue.data.updated_at,
+              labels: issue.data.labels.map((l: { name: string }) => l.name),
+              assignees: issue.data.assignees.map((a: { login: string }) => a.login),
+              comments: comments.map((c) => {
+                  const comment = c as { user: { login: string }, body: string, created_at: string };
+                  return {
+                      author: comment.user.login,
+                      body: comment.body,
+                      created_at: comment.created_at
+                  };
+              })
+          };
+      });
+
+      const issues = await Promise.all(issuePromises);
 
       return {
         success: true,
         value: {
-          number: issueNumber,
-          title: issue.data.title,
-          body: issue.data.body,
-          state: issue.data.state,
-          author: issue.data.user.login,
-          created_at: issue.data.created_at,
-          updated_at: issue.data.updated_at,
-          labels: issue.data.labels.map((l: { name: string }) => l.name),
-          assignees: issue.data.assignees.map((a: { login: string }) => a.login),
-          comments: comments.map((c) => {
-              const comment = c as { user: { login: string }, body: string, created_at: string };
-              return {
-                  author: comment.user.login,
-                  body: comment.body,
-                  created_at: comment.created_at
-              };
-          })
+          issues: issues,
+          issues_count: issues.length
         }
       };
   } catch (error) {

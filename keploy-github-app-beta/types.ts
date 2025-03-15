@@ -126,6 +126,11 @@ export interface LinkedIssue {
   comments: IssueComment[];
 }
 
+export interface LinkedIssues {
+  issues: LinkedIssue[];
+  issues_count: number;
+}
+
 export interface PRData {
   metadata: PRMetadata;
   comments: PRComments;
@@ -136,7 +141,7 @@ export interface PRData {
     labels: string[];
   };
   code_changes: CodeChanges;
-  linked_issue: LinkedIssue | null;
+  linked_issues: LinkedIssues | null;
   repository: Repository;
 }
 

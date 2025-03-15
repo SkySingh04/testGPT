@@ -47,20 +47,22 @@ ${useCase?.suggestedModels.map(model => `- ${model.name}: ${model.link}`).join('
   const code_changes = JSON.stringify(prData.code_changes, null, 2); // Adding indentation for better readability
 
   // Build the issue context if available
-  const issueContext = prData.linked_issue ? `
-  Linked Issue:
-  Number: #${prData.linked_issue.number}
-  Title: ${prData.linked_issue.title}
-  Description: ${prData.linked_issue.body}
-  State: ${prData.linked_issue.state}
-  Labels: ${prData.linked_issue.labels.join(', ')}
-  Assignees: ${prData.linked_issue.assignees.join(', ')}
+  const issueContext = prData.linked_issues && prData.linked_issues.issues_count > 0 ? `
+  Linked Issues (${prData.linked_issues.issues_count}):
+  ${prData.linked_issues.issues.map(issue => `
+  Number: #${issue.number}
+  Title: ${issue.title}
+  Description: ${issue.body}
+  State: ${issue.state}
+  Labels: ${issue.labels.join(', ')}
+  Assignees: ${issue.assignees.join(', ')}
   
   Issue Discussion:
-  ${prData.linked_issue.comments.map((c: IssueComment) => 
+  ${issue.comments.map((c: IssueComment) => 
     `${c.author} (${c.created_at}): ${c.body}`
   ).join('\n')}
-  ` : 'No linked issue found';
+  `).join('\n')}
+  ` : 'No linked issues found';
 
   // Build the analysis comment
   const analysis = `PR Analysis using ${API}:
@@ -112,15 +114,16 @@ export async function analyzeLLM(prData: PRData, rules: string, API: string, mod
     },
     pr: prData,
     rules: rules,
-    issue_context: prData.linked_issue ? {
-      issue_number: prData.linked_issue.number,
-      issue_title: prData.linked_issue.title,
-      issue_description: prData.linked_issue.body,
-      issue_status: prData.linked_issue.state,
-      issue_labels: prData.linked_issue.labels,
-      issue_assignees: prData.linked_issue.assignees,
-      issue_discussion: prData.linked_issue.comments
-    } : null
+    issue_context: prData.linked_issues && prData.linked_issues.issues_count > 0 ? 
+      prData.linked_issues.issues.map(issue => ({
+        issue_number: issue.number,
+        issue_title: issue.title,
+        issue_description: issue.body,
+        issue_status: issue.state,
+        issue_labels: issue.labels,
+        issue_assignees: issue.assignees,
+        issue_discussion: issue.comments
+      })) : null
   };
 
   const stringanalysisContext = JSON.stringify(analysisContext, null, 2);
