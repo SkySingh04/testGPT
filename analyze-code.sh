@@ -1,6 +1,9 @@
 #!/bin/bash
 
+# Change to the workspace directory
 cd $GITHUB_WORKSPACE/$WORKDIR
+
+# Ensure analysis-reports directory exists
 mkdir -p analysis-reports
 
 # Function to find existing linter installations
@@ -10,40 +13,47 @@ find_linter() {
   echo $system_path
 }
 
+# Log message function
+log_message() {
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+}
+
+log_message "Starting code analysis"
+
 for lang in $DETECTED_LANGUAGES; do
   case "$lang" in
     go)
       GO_LINTER=$(find_linter golangci-lint)
       if [ -z "$GO_LINTER" ]; then
-        echo "Installing golangci-lint..."
+        log_message "Installing golangci-lint..."
         go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
       else
-        echo "Using system golangci-lint: $GO_LINTER"
+        log_message "Using system golangci-lint: $GO_LINTER"
       fi
       ;;
     javascript)
       JS_LINTER=$(find_linter eslint)
       if [ -z "$JS_LINTER" ]; then
-        echo "Installing eslint..."
+        log_message "Installing eslint..."
         npm install -g eslint
       else
-        echo "Using system eslint: $JS_LINTER"
+        log_message "Using system eslint: $JS_LINTER"
       fi
       ;;
     python)
       PY_LINTER=$(find_linter flake8)
       PY_SECURITY=$(find_linter bandit)
       if [ -z "$PY_LINTER" ]; then
-        echo "Installing flake8..."
+        log_message "Installing flake8..."
         pip install flake8
       else
-        echo "Using system flake8: $PY_LINTER"
+        log_message "Using system flake8: $PY_LINTER"
       fi
       if [ -z "$PY_SECURITY" ]; then
-        echo "Installing bandit..."
+        log_message "Installing bandit..."
         pip install bandit
       else
-        echo "Using system bandit: $PY_SECURITY"
+        log_message "Using system bandit: $PY_SECURITY"
       fi
       ;;
   esac
@@ -126,3 +136,5 @@ for report in analysis-reports/*; do
   fi
 done
 mv "$temp_file" analysis-reports/final-report.txt
+
+log_message "Code analysis completed"
