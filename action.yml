@@ -41,10 +41,7 @@ runs:
       
     - name: Grant permissions to scripts
       run: |
-        chmod +x ${GITHUB_ACTION_PATH}/install.sh
-        chmod +x ${GITHUB_ACTION_PATH}/detect-languages.sh
-        chmod +x ${GITHUB_ACTION_PATH}/analyze-code.sh
-        chmod +x ${GITHUB_ACTION_PATH}/parse-results.sh
+        chmod +x ${GITHUB_ACTION_PATH}/install.sh ${GITHUB_ACTION_PATH}/detect-languages.sh ${GITHUB_ACTION_PATH}/analyze-code.sh ${GITHUB_ACTION_PATH}/parse-results.sh
       shell: bash
       
     - id: keploy-test-report
