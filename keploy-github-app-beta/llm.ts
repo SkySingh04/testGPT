@@ -14,13 +14,24 @@ export async function handlePrAnalysis(
   app: App
 ) {
   // Load current configuration
-  const config = loadConfig();
-  const useCase = config ? useCaseModels[config.useCase] : null;
+  const configResult = loadConfig();
+  let useCase = null;
+  let useCaseStr = 'Not configured';
+  let apiEndpoint = 'Not configured';
+  
+  if (configResult.success) {
+    const config = configResult.value;
+    useCase = useCaseModels[config.useCase];
+    useCaseStr = config.useCase;
+    apiEndpoint = config.apiEndpoint;
+  } else {
+    app.log.error(`Failed to load configuration: ${configResult.error.message}`);
+  }
 
   // Build the config info comment
   const configInfo = `## Keploy Configuration
-Use Case: ${config?.useCase || 'Not configured'}
-API Endpoint: ${config?.apiEndpoint || 'Not configured'}
+Use Case: ${useCaseStr}
+API Endpoint: ${apiEndpoint}
 
 ### Suggested Models for ${useCase?.name || 'current use case'}:
 ${useCase?.suggestedModels.map(model => `- ${model.name}: ${model.link}`).join('\n') || 'No models configured'}

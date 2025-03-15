@@ -11,6 +11,30 @@ import {
   PatchResult
 } from './types.js';
 
+// Define a local ApiError class
+class ApiError extends Error {
+  public readonly status?: number;
+
+  constructor(message: string, public readonly cause?: unknown, status?: number) {
+    super(message);
+    this.name = this.constructor.name;
+    this.status = status;
+  }
+
+  public static fromError(error: unknown): ApiError {
+    const errorObj = error as { status?: number; message?: string };
+    const errorMessage = errorObj.message || 'Unknown API error';
+    const statusCode = errorObj.status;
+    
+    return new ApiError(errorMessage, error, statusCode);
+  }
+}
+
+// Define a Result type for handling success/failure
+type Result<T, E = Error> = 
+  | { success: true; value: T } 
+  | { success: false; error: E };
+
 export async function getAllPrDetails(context: GithubContext, app: App): Promise<PRData> {
   const { pull_request: pr } = context.payload;
   const { owner, repo } = context.repo();
@@ -18,7 +42,18 @@ export async function getAllPrDetails(context: GithubContext, app: App): Promise
   
   // Extract issue number from PR body or title using regex
   const issueNumber = extractIssueNumber(pr.body || pr.title);
-  const issueData = issueNumber ? await getLinkedIssueData(context, app, owner, repo, issueNumber) : null;
+  
+  // Get linked issue data with proper error handling
+  let issueData: LinkedIssue | null = null;
+  if (issueNumber) {
+    const issueResult = await getLinkedIssueData(context, app, owner, repo, issueNumber);
+    if (issueResult.success) {
+      issueData = issueResult.value;
+    } else {
+      app.log.error(`Failed to get linked issue data: ${issueResult.error.message}`);
+      // Optionally post a comment about the issue data fetch failure
+    }
+  }
   
   // Get repository context
   const repoContext = await getRepositoryContext(context, app);
@@ -44,7 +79,7 @@ function extractIssueNumber(text: string): number | null {
   return match ? parseInt(match[1]) : null;
 }
 
-async function getLinkedIssueData(context: GithubContext, app: App, owner: string, repo: string, issueNumber: number): Promise<LinkedIssue | null> {
+async function getLinkedIssueData(context: GithubContext, app: App, owner: string, repo: string, issueNumber: number): Promise<Result<LinkedIssue, Error>> {
   try {
       const issue = await context.octokit.issues.get({
           owner,
@@ -58,6 +93,8 @@ async function getLinkedIssueData(context: GithubContext, app: App, owner: strin
       );
 
       return {
+        success: true,
+        value: {
           number: issueNumber,
           title: issue.data.title,
           body: issue.data.body,
@@ -75,10 +112,12 @@ async function getLinkedIssueData(context: GithubContext, app: App, owner: strin
                   created_at: comment.created_at
               };
           })
+        }
       };
   } catch (error) {
-      app.log.error('Error fetching linked issue data:', error);
-      return null;
+      const appError = ApiError.fromError(error);
+      app.log.error(`Error fetching linked issue data: ${appError.message}`, error);
+      return { success: false, error: appError };
   }
 }
 
