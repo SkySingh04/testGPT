@@ -38,15 +38,38 @@ type Result<T, E = Error> =
 export async function getAllPrDetails(context: GithubContext, app: App): Promise<PRData> {
   const { pull_request: pr } = context.payload;
   const { owner, repo } = context.repo();
-  const filesResult = await getPrFilesAndDiffs(context, app, owner, repo, pr.number);
   
   // Extract issue number from PR body or title using regex
   const issueNumber = extractIssueNumber(pr.body || pr.title);
   
-  // Get linked issue data with proper error handling
-  let issueData: LinkedIssue | null = null;
+  // Prepare all async operations to run in parallel
+  const promises = {
+    filesResult: getPrFilesAndDiffs(context, app, owner, repo, pr.number),
+    prComments: getPrComments(context, app, owner, repo, pr.number),
+    repoContext: getRepositoryContext(context, app)
+  };
+  
+  // Add issue data promise conditionally
+  let issueDataPromise = null;
   if (issueNumber) {
-    const issueResult = await getLinkedIssueData(context, app, owner, repo, issueNumber);
+    issueDataPromise = getLinkedIssueData(context, app, owner, repo, issueNumber);
+  }
+  
+  // Execute all promises in parallel
+  const [
+    filesResult,
+    prComments,
+    repoContext
+  ] = await Promise.all([
+    promises.filesResult,
+    promises.prComments,
+    promises.repoContext
+  ]);
+  
+  // Process issue data separately since it's conditional
+  let issueData: LinkedIssue | null = null;
+  if (issueDataPromise) {
+    const issueResult = await issueDataPromise;
     if (issueResult.success) {
       issueData = issueResult.value;
     } else {
@@ -54,13 +77,10 @@ export async function getAllPrDetails(context: GithubContext, app: App): Promise
       // Optionally post a comment about the issue data fetch failure
     }
   }
-  
-  // Get repository context
-  const repoContext = await getRepositoryContext(context, app);
 
   return {
       metadata: getPrMetadata(pr),
-      comments: await getPrComments(context, app, owner, repo, pr.number),
+      comments: prComments,
       files: filesResult,
       relationships: {
           requested_reviewers: pr.requested_reviewers?.map((u) => u.login) || [],
@@ -81,16 +101,18 @@ function extractIssueNumber(text: string): number | null {
 
 async function getLinkedIssueData(context: GithubContext, app: App, owner: string, repo: string, issueNumber: number): Promise<Result<LinkedIssue, Error>> {
   try {
-      const issue = await context.octokit.issues.get({
-          owner,
-          repo,
-          issue_number: issueNumber
-      });
-
-      const comments = await context.octokit.paginate(
-          context.octokit.issues.listComments,
-          { owner, repo, issue_number: issueNumber }
-      );
+      // Fetch issue details and comments in parallel
+      const [issue, comments] = await Promise.all([
+          context.octokit.issues.get({
+              owner,
+              repo,
+              issue_number: issueNumber
+          }),
+          context.octokit.paginate(
+              context.octokit.issues.listComments,
+              { owner, repo, issue_number: issueNumber }
+          )
+      ]);
 
       return {
         success: true,
@@ -352,19 +374,19 @@ function parsePatch(patch: string | undefined): PatchResult {
 async function getRepositoryContext(context: GithubContext, app: App) {
   const { owner, repo } = context.repo();
   try {
-    // Fetch README content
-    const readmeResponse = await context.octokit.repos.getReadme({
-      owner,
-      repo
-    });
-    
-    // Fetch repository structure using git trees
-    const repoStructure = await context.octokit.git.getTree({
-      owner,
-      repo,
-      tree_sha: 'HEAD',
-      recursive: true
-    });
+    // Fetch README content and repository structure in parallel
+    const [readmeResponse, repoStructure] = await Promise.all([
+      context.octokit.repos.getReadme({
+        owner,
+        repo
+      }),
+      context.octokit.git.getTree({
+        owner,
+        repo,
+        tree_sha: 'HEAD',
+        recursive: true
+      })
+    ]);
 
     const folderStructure = repoStructure.data.tree
       .filter((item: { path: string }) => !item.path.includes('node_modules/')) // Exclude node_modules

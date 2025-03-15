@@ -44,9 +44,12 @@ export default async (app: App) => {
             await reviewPR(context as any, app, llmOutput);
             // await reviewPR(context, app);
             
-            await handleKeployWorkflowTrigger(context);  
-            await handleSecurityWorkflowTrigger(context);
-            await handleLintWorkflowTrigger(context);    
+            // Run all workflow triggers in parallel
+            await Promise.all([
+                handleKeployWorkflowTrigger(context),  
+                handleSecurityWorkflowTrigger(context),
+                handleLintWorkflowTrigger(context)
+            ]);
         } catch (error) {
             await handleError(context, app, error);
         }
