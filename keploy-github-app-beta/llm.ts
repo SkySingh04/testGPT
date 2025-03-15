@@ -3,16 +3,15 @@ import { getRulesForLLM } from './rules.js';
 import { loadConfig } from './src/config/userConfig.js';
 import { useCaseModels } from './src/config/models.js';
 import { determineLabelFromAnalysis, addLabelToPR } from './src/addLabel.js';
+import { App, GithubContext, PRData, IssueComment, Config } from './types.js';
 // import { createInlineCommentsFromDiff } from './diffparser.js';
 
-
 export async function handlePrAnalysis(
-  context: { 
-    octokit: { issues: { createComment: (arg0: any) => any; }; }; 
-    repo: () => any; 
-    payload: { pull_request: { number: any; }; }; 
-  }, 
-  prData: any, API : string, model: string , app: any
+  context: GithubContext, 
+  prData: PRData, 
+  API: string, 
+  model: string, 
+  app: App
 ) {
   // Load current configuration
   const config = loadConfig();
@@ -47,7 +46,7 @@ ${useCase?.suggestedModels.map(model => `- ${model.name}: ${model.link}`).join('
   Assignees: ${prData.linked_issue.assignees.join(', ')}
   
   Issue Discussion:
-  ${prData.linked_issue.comments.map((c: any) => 
+  ${prData.linked_issue.comments.map((c: IssueComment) => 
     `${c.author} (${c.created_at}): ${c.body}`
   ).join('\n')}
   ` : 'No linked issue found';
@@ -83,7 +82,7 @@ ${useCase?.suggestedModels.map(model => `- ${model.name}: ${model.link}`).join('
   // });
 
   // call the LLM analysis function with selected model
-  const llmOutput = await analyzeLLM(prData, rules.rules , API  , model, app);
+  const llmOutput = await analyzeLLM(prData, rules.rules, API, model, app);
 
   // Determine and add appropriate label
   const labelToAdd = await determineLabelFromAnalysis(llmOutput);
@@ -92,8 +91,7 @@ ${useCase?.suggestedModels.map(model => `- ${model.name}: ${model.link}`).join('
   return llmOutput;
 }
 
-;
-export async function analyzeLLM(prData: any, rules: any, API: string, model: string , app : any) {
+export async function analyzeLLM(prData: PRData, rules: string, API: string, model: string, app: App) {
   const analysisContext = {
     repository: {
       name: prData.repository.name,
@@ -244,19 +242,30 @@ LGTM!
   app.log.info(`Using Hugging Face API: ${API}`);
   app.log.info(`Using LLM model: ${model}`);
   app.log.info('Rules:', rules);
-  app.log.info('PR Data:', prData);
+  app.log.info('PR Data:', JSON.stringify(prData, null, 2));
 
 
   // Call the API with the analysis context
-  var response = await axios.post(API, {
-    model: model,
-    prompt
-  });
+  try {
+    const response = await axios.post(API, {
+      model: model,
+      prompt: prompt,
+      // max_tokens: 2000,
+      temperature: 0.7,
+    }, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
 
-  // const stringResp = await JSON.stringify(response.data, null, 2);
-  // app.log.info('API Response:',stringResp);
-  return response.data.response;
-  
+    app.log.info('LLM API response:', response.data);
+
+    // Assuming the response data contains a 'generated_text' field with the analysis
+    return response.data.generated_text || response.data;
+  } catch (error) {
+    app.log.error('Error calling LLM API:', error);
+    return `Error analyzing PR: ${error instanceof Error ? error.message : 'Unknown error'}`;
+  }
 }
 
 

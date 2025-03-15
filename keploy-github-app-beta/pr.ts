@@ -1,5 +1,17 @@
 // Core data collection functions
-export async function getAllPrDetails(context: any, app: any) {
+import { 
+  App, 
+  GithubContext, 
+  PullRequest, 
+  PRData, 
+  Comment, 
+  FileChange, 
+  CodeChanges, 
+  LinkedIssue,
+  PatchResult
+} from './types.js';
+
+export async function getAllPrDetails(context: GithubContext, app: App): Promise<PRData> {
   const { pull_request: pr } = context.payload;
   const { owner, repo } = context.repo();
   const filesResult = await getPrFilesAndDiffs(context, app, owner, repo, pr.number);
@@ -16,9 +28,9 @@ export async function getAllPrDetails(context: any, app: any) {
       comments: await getPrComments(context, app, owner, repo, pr.number),
       files: filesResult,
       relationships: {
-          requested_reviewers: pr.requested_reviewers?.map((u: { login: any }) => u.login) || [],
-          assignees: pr.assignees?.map((u: { login: any }) => u.login) || [],
-          labels: pr.labels?.map((l: { name: any }) => l.name) || []
+          requested_reviewers: pr.requested_reviewers?.map((u) => u.login) || [],
+          assignees: pr.assignees?.map((u) => u.login) || [],
+          labels: pr.labels?.map((l) => l.name) || []
       },
       code_changes: extractCodeChangesForLLM(app, filesResult),
       linked_issue: issueData,
@@ -32,7 +44,7 @@ function extractIssueNumber(text: string): number | null {
   return match ? parseInt(match[1]) : null;
 }
 
-async function getLinkedIssueData(context: any, app: any, owner: string, repo: string, issueNumber: number) {
+async function getLinkedIssueData(context: GithubContext, app: App, owner: string, repo: string, issueNumber: number): Promise<LinkedIssue | null> {
   try {
       const issue = await context.octokit.issues.get({
           owner,
@@ -53,9 +65,9 @@ async function getLinkedIssueData(context: any, app: any, owner: string, repo: s
           author: issue.data.user.login,
           created_at: issue.data.created_at,
           updated_at: issue.data.updated_at,
-          labels: issue.data.labels.map((l: { name: any }) => l.name),
-          assignees: issue.data.assignees.map((a: { login: any }) => a.login),
-          comments: comments.map((c: any) => ({
+          labels: issue.data.labels.map((l: { name: string }) => l.name),
+          assignees: issue.data.assignees.map((a: { login: string }) => a.login),
+          comments: comments.map((c: { user: { login: string }, body: string, created_at: string }) => ({
               author: c.user.login,
               body: c.body,
               created_at: c.created_at
@@ -68,9 +80,10 @@ async function getLinkedIssueData(context: any, app: any, owner: string, repo: s
 }
 
 // Update extractCodeChangesForLLM to handle the files array directly
-export function extractCodeChangesForLLM(app: any, files: any) {
+export function extractCodeChangesForLLM(app: App, files: FileChange[]): CodeChanges {
   app.log.info("Processing code changes for files");
-  app.log.info(files);
+  // Using string interpolation to safely convert object to string for logging
+  app.log.info(`Files: ${files.length} items`);
 
   // Check if files is an array; if not, log error and return empty
   if (!Array.isArray(files)) {
@@ -84,11 +97,11 @@ export function extractCodeChangesForLLM(app: any, files: any) {
   // const codeFileExtensions = ['.js', '.py', '.java', '.cpp', '.ts', '.go', '.rs', '.php', '.rb'];
   
   const codeChanges = files
-      // .filter((file: any) => {
+      // .filter((file) => {
       //     const ext = '.' + file.filename.split('.').pop().toLowerCase();
       //     return codeFileExtensions.includes(ext);
       // })
-      .map((file: any) => {
+      .map((file) => {
           const changes = parsePatch(file.patch);
           return {
               file: file.filename,
@@ -115,13 +128,20 @@ export function extractCodeChangesForLLM(app: any, files: any) {
 }
 
 // Ensure getPrFilesAndDiffs returns an empty array on error
-export async function getPrFilesAndDiffs(context: any, app: any, owner: string, repo: string, prNumber: number) {
+export async function getPrFilesAndDiffs(context: GithubContext, app: App, owner: string, repo: string, prNumber: number): Promise<FileChange[]> {
   try {
       const files = await context.octokit.paginate(
           context.octokit.pulls.listFiles,
           { owner, repo, pull_number: prNumber }
       );
-      return files.map((file: any) => ({
+      return files.map((file: { 
+        filename: string, 
+        status: string, 
+        additions: number, 
+        deletions: number, 
+        changes: number, 
+        patch?: string 
+      }) => ({
           filename: file.filename,
           status: file.status,
           additions: file.additions,
@@ -135,55 +155,81 @@ export async function getPrFilesAndDiffs(context: any, app: any, owner: string, 
   }
 }
 
-  function getPrMetadata(pr : any) {
-    return {
-      title: pr.title,
-      body: pr.body,
-      author: pr.user.login,
-      state: pr.state,
-      draft: pr.draft,
-      created_at: pr.created_at,
-      updated_at: pr.updated_at,
-      mergeable: pr.mergeable,
-      additions: pr.additions,
-      deletions: pr.deletions,
-      changed_files: pr.changed_files,
-      base: {
-        branch: pr.base.ref,
-        sha: pr.base.sha
-      },
-      head: {
-        branch: pr.head.ref,
-        sha: pr.head.sha
-      }
-    };
-  }
-  
-  export async function getPrComments(context: { payload?: { pull_request: any; }; repo?: () => { owner: any; repo: any; }; octokit?: any; }, app: { log: any; on?: (arg0: string[], arg1: (context: any) => Promise<void>) => void; }, owner: any, repo: any, prNumber: any) {
-    try {
-      const [issueComments, reviewComments] = await Promise.all([
-        context.octokit.paginate(context.octokit.issues.listComments, {
-          owner, repo, issue_number: prNumber
-        }),
-        context.octokit.paginate(context.octokit.pulls.listReviewComments, {
-          owner, repo, pull_number: prNumber
-        })
-      ]);
-  
-      return {
-        issue_comments: issueComments.map(formatComment),
-        review_comments: reviewComments.map(formatComment)
-      };
-    } catch (error) {
-      app.log.error('Error fetching comments:', error);
-      return { error: 'Failed to fetch comments' };
+function getPrMetadata(pr: PullRequest) {
+  return {
+    title: pr.title,
+    body: pr.body,
+    author: pr.user.login,
+    state: pr.state,
+    draft: pr.draft,
+    created_at: pr.created_at,
+    updated_at: pr.updated_at,
+    mergeable: pr.mergeable,
+    additions: pr.additions,
+    deletions: pr.deletions,
+    changed_files: pr.changed_files,
+    base: {
+      branch: pr.base.ref,
+      sha: pr.base.sha
+    },
+    head: {
+      branch: pr.head.ref,
+      sha: pr.head.sha
     }
-  }
+  };
+}
 
-  function formatComment(comment : any) {
+export async function getPrComments(
+  context: {
+    payload?: { pull_request: PullRequest };
+    repo?: () => { owner: string; repo: string };
+    octokit?: {
+      issues: { listComments: Function };
+      pulls: { listReviewComments: Function };
+      paginate: Function;
+    }
+  }, 
+  app: App, 
+  owner: string, 
+  repo: string, 
+  prNumber: number
+) {
+  try {
+    if (!context.octokit) {
+      app.log.error('Octokit is undefined');
+      return { issue_comments: [], review_comments: [] };
+    }
+
+    const [issueComments, reviewComments] = await Promise.all([
+      context.octokit.paginate(context.octokit.issues.listComments, {
+        owner, repo, issue_number: prNumber
+      }),
+      context.octokit.paginate(context.octokit.pulls.listReviewComments, {
+        owner, repo, pull_number: prNumber
+      })
+    ]);
+
+    return {
+      issue_comments: issueComments.map(formatComment),
+      review_comments: reviewComments.map(formatComment)
+    };
+  } catch (error) {
+    app.log.error('Error fetching comments:', error);
+    return { issue_comments: [], review_comments: [] };
+  }
+}
+
+function formatComment(comment: {
+  id: number;
+  user?: { login: string };
+  body: string;
+  created_at: string;
+  updated_at: string;
+  html_url: string;
+}): Comment {
   return {
     id: comment.id,
-    user: comment.user?.login,
+    user: comment.user?.login || 'unknown',
     body: comment.body,
     created_at: comment.created_at,
     updated_at: comment.updated_at,
@@ -191,29 +237,27 @@ export async function getPrFilesAndDiffs(context: any, app: any, owner: string, 
   };
 }
 
-
-  
-  function parsePatch(patch : any) {
-    if (!patch || patch === 'Diff too large to display') {
-      return { added: [], removed: [] };
-    }
-  
-    const lines = patch.split('\n');
-    const added: any[] = [];
-    const removed: any[] = [];
-  
-    lines.forEach((line: any) => {
-      if (line.startsWith('+') && !line.startsWith('+++')) {
-        added.push(line.substring(1));
-      } else if (line.startsWith('-') && !line.startsWith('---')) {
-        removed.push(line.substring(1));
-      }
-    });
-  
-    return { added, removed };
+function parsePatch(patch: string | undefined): PatchResult {
+  if (!patch || patch === 'Diff too large to display') {
+    return { added: [], removed: [] };
   }
 
-async function getRepositoryContext(context: any, app: any) {
+  const lines = patch.split('\n');
+  const added: string[] = [];
+  const removed: string[] = [];
+
+  lines.forEach((line: string) => {
+    if (line.startsWith('+') && !line.startsWith('+++')) {
+      added.push(line.substring(1));
+    } else if (line.startsWith('-') && !line.startsWith('---')) {
+      removed.push(line.substring(1));
+    }
+  });
+
+  return { added, removed };
+}
+
+async function getRepositoryContext(context: GithubContext, app: App) {
   const { owner, repo } = context.repo();
   try {
     // Fetch README content
@@ -234,8 +278,8 @@ async function getRepositoryContext(context: any, app: any) {
     });
 
     const folderStructure = repoStructure.data.tree
-      .filter((item: any) => !item.path.includes('node_modules/')) // Exclude node_modules
-      .map((item: any) => item.path)
+      .filter((item: { path: string }) => !item.path.includes('node_modules/')) // Exclude node_modules
+      .map((item: { path: string }) => item.path)
       .join('\n');
 
     return {
@@ -248,7 +292,7 @@ async function getRepositoryContext(context: any, app: any) {
     app.log.error('Error fetching repository context:', error);
     return {
       readme: 'Failed to fetch README',
-      structure: 'Failed to fetch structure',
+      structure: 'Failed to fetch repository structure',
       name: repo,
       owner: owner
     };

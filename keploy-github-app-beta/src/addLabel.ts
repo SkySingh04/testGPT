@@ -1,3 +1,5 @@
+import { GithubContext } from '../types.js';
+
 interface LabelOptions {
     name: string;
     color: string;
@@ -35,10 +37,10 @@ export async function determineLabelFromAnalysis(llmResponse: string): Promise<s
 }
 
 export async function addLabelToPR(
-    context: any,
+    context: GithubContext,
     prNumber: number,
     labelName: string
-) {
+): Promise<boolean> {
     try {
         // Remove existing review labels first
         const existingLabels = Object.keys(LABEL_CONFIGS);
