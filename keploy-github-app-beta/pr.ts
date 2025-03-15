@@ -163,8 +163,26 @@ export async function getPrFilesAndDiffs(context: GithubContext, app: App, owner
               patch: f.patch || 'Diff too large to display'
           };
       });
-  } catch (error) {
-      app.log.error('Error fetching files:', error);
+  } catch (error: unknown) {
+      const errorObj = error as { status?: number; message?: string };
+      const errorMessage = errorObj.message || 'Unknown error';
+      const statusCode = errorObj.status ? ` (Status: ${errorObj.status})` : '';
+      
+      app.log.error(`Error fetching files: ${errorMessage}${statusCode}`, error);
+      
+      try {
+          if (prNumber) {
+              await context.octokit.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: prNumber,
+                  body: `⚠️ Failed to fetch PR files: ${errorMessage}${statusCode}`
+              });
+          }
+      } catch (commentError) {
+          app.log.error('Failed to post error comment:', commentError);
+      }
+      
       return []; 
   }
 }
@@ -198,7 +216,10 @@ export async function getPrComments(
     payload?: { pull_request: PullRequest };
     repo?: () => { owner: string; repo: string };
     octokit?: {
-      issues: { listComments: Function };
+      issues: { 
+        listComments: Function;
+        createComment: Function;
+      };
       pulls: { listReviewComments: Function };
       paginate: Function;
     }
@@ -227,8 +248,26 @@ export async function getPrComments(
       issue_comments: issueComments.map(formatComment),
       review_comments: reviewComments.map(formatComment)
     };
-  } catch (error) {
-    app.log.error('Error fetching comments:', error);
+  } catch (error: unknown) {
+    const errorObj = error as { status?: number; message?: string };
+    const errorMessage = errorObj.message || 'Unknown error';
+    const statusCode = errorObj.status ? ` (Status: ${errorObj.status})` : '';
+    
+    app.log.error(`Error fetching comments: ${errorMessage}${statusCode}`, error);
+    
+    try {
+      if (context.octokit && prNumber) {
+        await context.octokit.issues.createComment({
+          owner,
+          repo,
+          issue_number: prNumber,
+          body: `⚠️ Failed to fetch PR comments: ${errorMessage}${statusCode}`
+        });
+      }
+    } catch (commentError) {
+      app.log.error('Failed to post error comment:', commentError);
+    }
+    
     return { issue_comments: [], review_comments: [] };
   }
 }
