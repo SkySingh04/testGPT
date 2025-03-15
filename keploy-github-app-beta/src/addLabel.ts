@@ -29,11 +29,20 @@ export async function determineLabelFromAnalysis(llmResponse: string): Promise<s
     
     if (lowerResponse.includes('lgtm!')) {
         return 'LGTM';
-    } else if (lowerResponse.includes('spam') || lowerResponse.length < 10) {
+    } else if (lowerResponse.includes('spam') || 
+              (lowerResponse.length < 10 && !isValidShortResponse(lowerResponse))) {
         return 'Spam';
     } else {
         return 'Needs Changes';
     }
+}
+
+// Helper function to identify valid short responses
+function isValidShortResponse(response: string): boolean {
+    const validShortResponses = [
+        'ok', 'yes', 'no', 'good', 'fine', 'nice', 'approved', '+1'
+    ];
+    return validShortResponses.some(valid => response.includes(valid));
 }
 
 export async function addLabelToPR(
