@@ -1,5 +1,5 @@
 {
   "useCase": "Documentation",
-  "apiEndpoint": "https://xyz/api/generate",
+  "apiEndpoint": "",
   "selectedModel": "llama2"
 }
