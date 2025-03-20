@@ -1,3 +1,4 @@
+// Core data collection functions
 import { 
   App, 
   GithubContext, 
