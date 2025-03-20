@@ -1,4 +1,3 @@
-// GitHub API related types
 export interface Repository {
   name: string;
   owner: string;
