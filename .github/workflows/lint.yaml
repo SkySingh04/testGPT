@@ -78,7 +78,7 @@ jobs:
                 golangci-lint run --out-format=github-actions ./... > analysis-reports/go-lint.txt || true
                 ;;
               javascript)
-                eslint . --format junit -o analysis-reports/js-lint.xml || true
+                eslint . --config keploy-github-app-beta/eslint.config.js --format junit -o analysis-reports/js-lint.xml || true
                 ;;
               python)
                 which flake8 || pip install flake8
