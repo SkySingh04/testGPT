@@ -58,6 +58,7 @@ jobs:
                 ;;
               javascript)
                 npm install -g eslint
+                npm install -D eslint-formatter-junit
                 ;;
               python)
                 pip install flake8
