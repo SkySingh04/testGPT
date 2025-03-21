@@ -121,13 +121,17 @@ async function getLinkedIssueData(context: GithubContext, app: App, owner: strin
           return {
               number: issueNumber,
               title: issue.data.title,
-              body: issue.data.body,
+              body: issue.data.body ?? null,
               state: issue.data.state,
-              author: issue.data.user.login,
+              author: issue.data.user?.login || 'unknown',
               created_at: issue.data.created_at,
               updated_at: issue.data.updated_at,
-              labels: issue.data.labels.map((l: { name: string }) => l.name),
-              assignees: issue.data.assignees.map((a: { login: string }) => a.login),
+              labels: Array.isArray(issue.data.labels) 
+                ? issue.data.labels.map((l: any) => typeof l === 'string' ? l : (l.name || '')) 
+                : [],
+              assignees: Array.isArray(issue.data.assignees) 
+                ? issue.data.assignees.map((a: any) => a.login || '') 
+                : [],
               comments: comments.map((c) => {
                   const comment = c as { user: { login: string }, body: string, created_at: string };
                   return {
@@ -396,13 +400,13 @@ async function getRepositoryContext(context: GithubContext, app: App) {
         owner,
         repo,
         tree_sha: 'HEAD',
-        recursive: true
+        recursive: 'true'
       })
     ]);
 
     const folderStructure = repoStructure.data.tree
-      .filter((item: { path: string }) => !item.path.includes('node_modules/')) // Exclude node_modules
-      .map((item: { path: string }) => item.path)
+      .filter((item: any) => item.path && !item.path.includes('node_modules/'))
+      .map((item: any) => item.path || '')
       .join('\n');
 
     // Convert ReadmeResponse to string for compatibility with Repository type

@@ -1,3 +1,6 @@
+// For better type safety with Octokit
+import type { ProbotOctokit } from 'probot/lib/octokit/probot-octokit.js';
+
 export interface Repository {
   name: string;
   owner: string;
@@ -298,30 +301,7 @@ export interface ListReviewCommentsParams {
 
 // GitHub context types
 export interface GithubContext {
-  octokit: {
-    issues: {
-      createComment: (params: CreateCommentParams) => Promise<{ data: CommentResponse }>;
-      get: (params: GetIssueParams) => Promise<{ data: IssueResponse }>;
-      listComments: (params: ListCommentsParams) => Promise<{ data: CommentResponse[] }>;
-      removeLabel: (params: RemoveLabelParams) => Promise<void>;
-      addLabels: (params: AddLabelsParams) => Promise<{ data: Label[] }>;
-    };
-    pulls: {
-      listFiles: (params: ListFilesParams) => Promise<{ data: FileChange[] }>;
-      listReviewComments: (params: ListReviewCommentsParams) => Promise<{ data: Comment[] }>;
-    };
-    repos: {
-      getReadme: (params: GetReadmeParams) => Promise<{ data: ReadmeResponse }>;
-      getContent: (params: GetContentParams) => Promise<{ data: ContentResponse }>;
-    };
-    actions: {
-      createWorkflowDispatch: (params: CreateWorkflowDispatchParams) => Promise<void>;
-    };
-    git: {
-      getTree: (params: GetTreeParams) => Promise<{ data: TreeResponse }>;
-    };
-    paginate: <T>(method: Function, params: object) => Promise<T[]>;
-  };
+  octokit: ProbotOctokit;
   repo: () => { owner: string; repo: string };
   payload: {
     pull_request: PullRequest;
