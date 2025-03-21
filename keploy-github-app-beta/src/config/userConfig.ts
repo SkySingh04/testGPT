@@ -1,10 +1,19 @@
-import fs from 'fs';
+import * as fs from 'fs';
 
 // Define local error types for this file
 class ConfigFileError extends Error {
   constructor(message: string, public readonly cause?: unknown) {
     super(message);
     this.name = this.constructor.name;
+    // Maintain proper stack trace in Node.js
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, this.constructor);
+    }
+    
+    // Append the cause's stack to this error's stack if available
+    if (this.cause instanceof Error && this.cause.stack) {
+      this.stack = this.stack ? `${this.stack}\nCaused by: ${this.cause.stack}` : this.cause.stack;
+    }
   }
 }
 
@@ -44,6 +53,28 @@ export interface UserConfig {
 
 const CONFIG_FILE = 'keploy-config.json';
 
+/**
+ * Utility function to log errors with full stack traces
+ * @param message Custom error message
+ * @param error The error object
+ */
+function logError(message: string, error: unknown): void {
+  console.error(message);
+  
+  if (error instanceof Error) {
+    console.error('Error details:', error);
+    console.error('Stack trace:', error.stack);
+    
+    // If it's our custom error with a cause, log the cause stack too
+    if ('cause' in error && error.cause instanceof Error) {
+      console.error('Caused by:', error.cause);
+      console.error('Cause stack trace:', error.cause.stack);
+    }
+  } else {
+    console.error('Unknown error type:', error);
+  }
+}
+
 export function saveConfig(config: UserConfig): Result<void, Error> {
   try {
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
@@ -60,7 +91,7 @@ export function saveConfig(config: UserConfig): Result<void, Error> {
       appError = new ConfigError(`Failed to save configuration: ${errorObj.message || 'Unknown error'}`, error);
     }
     
-    console.error(appError.message, error);
+    logError(appError.message, error);
     return { success: false, error: appError };
   }
 }
@@ -90,7 +121,7 @@ export function loadConfig(): Result<UserConfig, Error> {
       appError = new ConfigError(`Error loading config: ${errorMessage}`, error);
     }
     
-    console.error(appError.message, error);
+    logError(appError.message, error);
     return { success: false, error: appError };
   }
 }

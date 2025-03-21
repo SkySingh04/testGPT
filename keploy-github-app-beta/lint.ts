@@ -1,4 +1,5 @@
 import { GithubContext } from './types.js';
+import { logError } from './utils.js';
 
 export async function handleLintWorkflowTrigger(context: GithubContext) {
   const { owner, repo } = context.repo();
@@ -20,16 +21,16 @@ export async function handleLintWorkflowTrigger(context: GithubContext) {
     let commentBody: string;
     
     if (errorObj.status === 404) {
-      commentBody = 'Lint workflow failed: Workflow file not found or inaccessible';
+      commentBody = 'Failed to run linting: Workflow file not found or inaccessible';
     } else if (errorObj.status === 403) {
-      commentBody = 'Lint workflow failed: Permission denied to access or trigger workflow';
+      commentBody = 'Failed to run linting: Permission denied to access or trigger workflow';
     } else if (errorObj.status === 422) {
-      commentBody = 'Lint workflow failed: Request validation failed, please check workflow configuration';
+      commentBody = 'Failed to run linting: Request validation failed, please check workflow configuration';
     } else {
-      commentBody = `Lint workflow failed: ${errorMessage}${statusCode}`;
+      commentBody = `Failed to run linting: ${errorMessage}${statusCode}`;
     }
     
-    console.error('Lint workflow error:', error);
+    logError('Lint workflow error:', error);
     
     await context.octokit.issues.createComment({
       ...context.repo(),

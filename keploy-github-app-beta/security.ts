@@ -1,4 +1,5 @@
 import { GithubContext } from './types.js';
+import { logError } from './utils.js';
 
 export async function handleSecurityWorkflowTrigger(context: GithubContext) {
   const { owner, repo } = context.repo();
@@ -35,7 +36,7 @@ export async function handleSecurityWorkflowTrigger(context: GithubContext) {
       commentBody = `Failed to run security check: ${errorMessage}${statusCode}`;
     }
     
-    console.error('Security workflow error:', error);
+    logError('Security workflow error:', error);
     
     await context.octokit.issues.createComment({
       ...context.repo(),

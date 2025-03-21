@@ -27,6 +27,11 @@ export class AppError extends Error {
     if (Error.captureStackTrace) {
       Error.captureStackTrace(this, this.constructor);
     }
+    
+    // Append the cause's stack to this error's stack if available
+    if (this.cause instanceof Error && this.cause.stack) {
+      this.stack = this.stack ? `${this.stack}\nCaused by: ${this.cause.stack}` : this.cause.stack;
+    }
   }
 
   /**
@@ -41,6 +46,14 @@ export class AppError extends Error {
    */
   public toUserFriendlyMessage(): string {
     return this.message;
+  }
+  
+  /**
+   * Returns the full error stack including nested causes
+   */
+  public getFullStack(): string {
+    if (!this.stack) return this.message;
+    return this.stack;
   }
 }
 

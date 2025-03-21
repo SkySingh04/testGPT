@@ -45,6 +45,28 @@ function isValidShortResponse(response: string): boolean {
     return validShortResponses.some(valid => response.includes(valid));
 }
 
+/**
+ * Utility function to log errors with full stack traces
+ * @param message Custom error message
+ * @param error The error object
+ */
+function logError(message: string, error: unknown): void {
+  console.error(message);
+  
+  if (error instanceof Error) {
+    console.error('Error details:', error);
+    console.error('Stack trace:', error.stack);
+    
+    // If it's an error with a cause, log the cause stack too
+    if ('cause' in error && error.cause instanceof Error) {
+      console.error('Caused by:', error.cause);
+      console.error('Cause stack trace:', error.cause.stack);
+    }
+  } else {
+    console.error('Unknown error type:', error);
+  }
+}
+
 export async function addLabelToPR(
     context: GithubContext,
     prNumber: number,
@@ -74,7 +96,7 @@ export async function addLabelToPR(
 
         return true;
     } catch (error) {
-        console.error('Error adding label:', error);
+        logError('Error adding label:', error);
         return false;
     }
 }

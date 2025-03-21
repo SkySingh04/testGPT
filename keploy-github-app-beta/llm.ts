@@ -4,6 +4,7 @@ import { loadConfig } from './src/config/userConfig.js';
 import { useCaseModels } from './src/config/models.js';
 import { determineLabelFromAnalysis, addLabelToPR } from './src/addLabel.js';
 import { App, GithubContext, PRData, IssueComment, Config } from './types.js';
+import { logError } from './utils.js';
 // import { createInlineCommentsFromDiff } from './diffparser.js';
 
 export async function handlePrAnalysis(
@@ -277,7 +278,7 @@ LGTM!
     // Assuming the response data contains a 'generated_text' field with the analysis
     return response.data.generated_text || response.data;
   } catch (error) {
-    app.log.error('Error calling LLM API:', error);
+    logError('Error in LLM processing:', error);
     return `Error analyzing PR: ${error instanceof Error ? error.message : 'Unknown error'}`;
   }
 }

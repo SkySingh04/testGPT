@@ -8,7 +8,7 @@
 import { getAllPrDetails } from "./pr.js";
 import { handlePrAnalysis } from "./llm.js";
 import { handleKeployWorkflowTrigger } from "./keploy.js";
-import { handleError } from "./utils.js";
+import { handleError, logError } from "./utils.js";
 import { handleSecurityWorkflowTrigger } from "./security.js";
 import { promptUserConfig } from './src/cli.js';
 import { reviewPR } from './diffparser.js';
@@ -70,6 +70,7 @@ export default async (app: App) => {
                 handleLintWorkflowTrigger(context)
             ]);
         } catch (error) {
+            logError('Error processing PR event:', error);
             await handleError(context, app, error);
         }
     };

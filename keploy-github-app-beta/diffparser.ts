@@ -1,5 +1,6 @@
 // diffParser.ts
 import parseDiff, { File, Chunk, Change } from 'parse-diff';
+import { logError } from './utils.js';
 
 interface Repository {
     owner: {
@@ -162,15 +163,7 @@ export async function createInlineCommentsFromDiff(diff: string, context: GitHub
                     });
                     app.log.info(`Created comment on ${filePath} line ${line}`);
                 } catch (error) {
-                    if (error instanceof Error) {
-                        app.log.error(
-                            `Failed to create comment for ${filePath} line ${line}: ${error.message}`
-                        );
-                    } else {
-                        app.log.error(
-                            `Failed to create comment for ${filePath} line ${line}: Unknown error`
-                        );
-                    }
+                    logError(`Failed to create comment for ${filePath} line ${line}:`, error);
                 }
             }
         }

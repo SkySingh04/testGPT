@@ -1,4 +1,5 @@
 import { GithubContext } from './types.js';
+import { logError } from './utils.js';
 
 
 export async function handleKeployWorkflowTrigger(context: GithubContext) {
@@ -30,7 +31,7 @@ export async function handleKeployWorkflowTrigger(context: GithubContext) {
       commentBody = `⚠️ Failed to run Keploy Tests: ${errorMessage}${statusCode}`;
     }
     
-    console.error('Keploy workflow error:', error);
+    logError('Keploy workflow error:', error);
     
     await context.octokit.issues.createComment({
       ...context.repo(),

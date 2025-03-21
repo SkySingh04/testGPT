@@ -11,6 +11,7 @@ import {
   LinkedIssues,
   PatchResult
 } from './types.js';
+import { logError } from './utils.js';
 
 // Define a local ApiError class
 class ApiError extends Error {
