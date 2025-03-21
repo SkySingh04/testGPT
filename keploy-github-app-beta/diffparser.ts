@@ -1,6 +1,8 @@
-// diffParser.ts
+// diffparser.ts
 import parseDiff, { File, Chunk, Change } from 'parse-diff';
 import { logError } from './utils.js';
+import type { ProbotOctokit } from 'probot/lib/octokit/probot-octokit.js';
+import { App } from './types.js';
 
 interface Repository {
     owner: {
@@ -41,25 +43,29 @@ interface ReviewCommentParams {
     };
 }
 
-interface GitHubContext {
-    octokit: {
-        issues: {
-            createComment: (params: IssueCommentParams) => Promise<unknown>;
-        };
-        pulls: {
-            createReviewComment: (params: ReviewCommentParams) => Promise<unknown>;
-            listFiles: (params: { owner: string; repo: string; pull_number: number }) => Promise<{ data: any[] }>;
-            listReviewComments: (params: { owner: string; repo: string; pull_number: number }) => Promise<{ data: any[] }>;
-        };
-    };
-    repo: () => { owner: string; repo: string };
-    payload: GitHubPayload;
-}
-
 interface ProbotyApp {
     log: {
         info: (message: string) => void;
         error: (message: string) => void;
+    };
+}
+
+interface GitHubContext {
+    octokit: ProbotOctokit;
+    repo: () => { owner: string; repo: string };
+    payload: {
+        pull_request: {
+            number: number;
+            head: {
+                sha: string;
+            };
+        };
+        repository: {
+            owner: {
+                login: string;
+            };
+            name: string;
+        };
     };
 }
 
