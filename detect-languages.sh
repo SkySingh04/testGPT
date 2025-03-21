@@ -11,12 +11,22 @@ declare -A extensions=(
 )
 
 LANGUAGES=""
-for file in $(find . -type f); do
+
+# Exclude common non-source files
+while IFS= read -r file; do
   ext="${file##*.}"
   if [[ -n "${extensions[$ext]}" ]]; then
     LANGUAGES+="${extensions[$ext]} "
   fi
-done
+done < <(find . -type f \
+  -not -path "*/\.*/*" \
+  -not -path "*/node_modules/*" \
+  -not -path "*/dist/*" \
+  -not -path "*/build/*" \
+  -not -path "*/target/*" \
+  -not -path "*/vendor/*" \
+  -not -path "*/__pycache__/*" \
+  -size -1M)
 
 UNIQUE_LANGS=$(echo "$LANGUAGES" | tr ' ' '\n' | sort -u | tr '\n' ' ')
 echo "languages=$UNIQUE_LANGS" >> $GITHUB_OUTPUT
